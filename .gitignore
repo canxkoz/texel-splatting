@@ -1,0 +1,7 @@
+node_modules/
+dist/
+site/demo/
+test-results/
+.DS_Store
+bun.lockb
+package-lock.json

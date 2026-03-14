@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+        <title>texel research demo</title>
+        <style>
+            :root {
+                --bg: #0c0a09;
+                --border: #282420;
+                --text: #f0ece8;
+                --text-secondary: #c0b8b0;
+                --text-muted: #908880;
+                --accent: #d49560;
+                --panel: rgba(12, 10, 9, 0.8);
+            }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                background: var(--bg);
+                overflow: hidden;
+            }
+            canvas {
+                display: block;
+                width: 100vw;
+                height: 100vh;
+            }
+
+            .hud {
+                position: fixed;
+                top: 16px;
+                left: 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                background: var(--panel);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border: 1px solid var(--border);
+                padding: 10px 12px;
+                pointer-events: auto;
+                z-index: 10;
+                font-family: system-ui, -apple-system, sans-serif;
+                -webkit-font-smoothing: antialiased;
+            }
+            .hud-label {
+                font-size: 11px;
+                color: var(--text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            .mode-group {
+                display: flex;
+                border: 1px solid var(--border);
+            }
+            .mode-btn {
+                padding: 5px 12px;
+                background: transparent;
+                color: var(--text-secondary);
+                border: none;
+                border-right: 1px solid var(--border);
+                font-family: inherit;
+                font-size: 12px;
+                cursor: pointer;
+                transition: background 0.12s ease-out, color 0.12s ease-out;
+                white-space: nowrap;
+            }
+            .mode-btn:last-child {
+                border-right: none;
+            }
+            .mode-btn:hover:not(.active) {
+                background: rgba(255, 255, 255, 0.04);
+            }
+            .mode-btn.active {
+                background: rgba(212, 149, 96, 0.12);
+                color: var(--accent);
+            }
+
+            .fps {
+                position: fixed;
+                top: 16px;
+                right: 16px;
+                font-family: "JetBrains Mono", monospace;
+                font-size: 11px;
+                color: var(--text-muted);
+                background: var(--panel);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border: 1px solid var(--border);
+                padding: 6px 10px;
+                z-index: 10;
+                -webkit-font-smoothing: antialiased;
+            }
+
+            .controls-hint {
+                position: fixed;
+                top: 45%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                background: var(--panel);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border: 1px solid var(--border);
+                padding: 10px 20px;
+                z-index: 10;
+                font-family: system-ui, -apple-system, sans-serif;
+                font-size: 12px;
+                color: var(--text-secondary);
+                -webkit-font-smoothing: antialiased;
+                opacity: 1;
+                transition: opacity 0.6s ease-out;
+            }
+            .controls-hint.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .controls-hint kbd {
+                display: inline-block;
+                padding: 1px 5px;
+                font-family: "JetBrains Mono", monospace;
+                font-size: 11px;
+                color: var(--text);
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid var(--border);
+            }
+            .controls-hint .sep {
+                color: var(--border);
+            }
+
+            .time-panel {
+                position: fixed;
+                bottom: 16px;
+                right: 16px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: var(--panel);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                border: 1px solid var(--border);
+                padding: 8px 12px;
+                pointer-events: auto;
+                z-index: 10;
+                font-family: system-ui, -apple-system, sans-serif;
+                font-size: 13px;
+                color: var(--text-secondary);
+                -webkit-font-smoothing: antialiased;
+            }
+            .time-panel .time-icon {
+                font-size: 13px;
+                line-height: 1;
+                opacity: 0.6;
+            }
+            .time-panel .time-clock {
+                font-family: "JetBrains Mono", monospace;
+                font-size: 12px;
+                width: 38px;
+            }
+            .time-slider {
+                width: 180px;
+                height: 24px;
+                appearance: none;
+                -webkit-appearance: none;
+                background: transparent;
+                cursor: pointer;
+            }
+            .time-slider::-webkit-slider-runnable-track {
+                height: 6px;
+                background: var(--border);
+            }
+            .time-slider::-webkit-slider-thumb {
+                appearance: none;
+                -webkit-appearance: none;
+                width: 3px;
+                height: 18px;
+                background: var(--text-muted);
+                border: none;
+                border-radius: 0;
+                cursor: pointer;
+                margin-top: -6px;
+                transition: background 0.08s;
+            }
+            .time-slider::-webkit-slider-thumb:hover {
+                background: var(--accent);
+            }
+            .time-slider:active::-webkit-slider-thumb {
+                background: var(--accent);
+            }
+            .time-slider::-moz-range-track {
+                height: 6px;
+                background: var(--border);
+            }
+            .time-slider::-moz-range-thumb {
+                width: 3px;
+                height: 18px;
+                background: var(--text-muted);
+                border: none;
+                border-radius: 0;
+                cursor: pointer;
+            }
+            .time-slider::-moz-range-thumb:hover {
+                background: var(--accent);
+            }
+
+            .loading-overlay {
+                position: fixed;
+                inset: 0;
+                background: #1a1816;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 100;
+                transition: opacity 0.4s ease-out;
+            }
+            .loading-track {
+                width: 200px;
+                height: 3px;
+                background: #252220;
+            }
+            .loading-bar {
+                height: 100%;
+                width: 0%;
+                background: #d49560;
+                transition: width 0.15s ease-out;
+            }
+            @media (max-height: 600px) {
+                .hud { top: 8px; left: 8px; padding: 6px 8px; gap: 4px; }
+                .hud-label { font-size: 9px; }
+                .mode-btn { padding: 3px 8px; font-size: 10px; }
+                .fps { top: 8px; right: 8px; font-size: 9px; padding: 4px 6px; }
+                .time-panel { bottom: 8px; right: 8px; padding: 4px 8px; gap: 6px; font-size: 10px; }
+                .time-panel .time-clock { font-size: 10px; }
+                .time-slider { width: 120px; height: 18px; }
+                .controls-hint { top: 45%; bottom: auto; padding: 6px 12px; font-size: 10px; gap: 8px; white-space: nowrap; }
+                .controls-hint kbd { font-size: 9px; }
+            }
+
+            .ui-toggle {
+                display: none;
+            }
+
+            @media (pointer: coarse) {
+                .ui-toggle {
+                    display: block;
+                    position: fixed;
+                    top: 8px;
+                    right: 8px;
+                    background: var(--panel);
+                    backdrop-filter: blur(8px);
+                    -webkit-backdrop-filter: blur(8px);
+                    border: 1px solid var(--border);
+                    color: var(--text-muted);
+                    font-size: 12px;
+                    padding: 4px 8px;
+                    cursor: pointer;
+                    z-index: 11;
+                    line-height: 1;
+                    font-family: system-ui, -apple-system, sans-serif;
+                }
+                .hud { padding: 4px; gap: 0; }
+                .hud-label { display: none; }
+                .mode-btn .mode-label-full { display: none; }
+                .mode-btn .mode-label-short { display: inline; }
+                .mode-btn { padding: 4px 10px; font-size: 10px; min-width: 0; }
+                .fps { right: 40px; }
+                .controls-hint { display: none !important; }
+                .time-slider::-webkit-slider-thumb { width: 16px; height: 28px; margin-top: -11px; }
+                .time-slider::-moz-range-thumb { width: 16px; height: 28px; }
+            }
+
+            @media (pointer: fine) {
+                .mode-btn .mode-label-full { display: inline; }
+                .mode-btn .mode-label-short { display: none; }
+            }
+        </style>
+    </head>
+    <body>
+        <canvas></canvas>
+        <div class="loading-overlay">
+            <div class="loading-track"><div class="loading-bar"></div></div>
+        </div>
+
+        <div class="hud">
+            <span class="hud-label">Shimmer Correction</span>
+            <div class="mode-group" id="mode-group">
+                <button class="mode-btn" data-mode="none"><span class="mode-label-full">None</span><span class="mode-label-short">Off</span></button>
+                <button class="mode-btn" data-mode="cubemap"><span class="mode-label-full">Cubemap</span><span class="mode-label-short">Cube</span></button>
+                <button class="mode-btn active" data-mode="splat"><span class="mode-label-full">Texel Splatting</span><span class="mode-label-short">Splat</span></button>
+            </div>
+        </div>
+
+        <div class="fps" id="fps">&mdash; fps</div>
+        <button class="ui-toggle" id="ui-toggle">&#x2026;</button>
+
+        <div class="controls-hint" id="controls-hint">
+            <span><kbd>Click</kbd> to look</span>
+            <span class="sep">|</span>
+            <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move</span>
+        </div>
+
+        <div class="time-panel">
+            <span class="time-icon">&#9788;</span>
+            <span class="time-clock" id="time-clock">16:30</span>
+            <input type="range" class="time-slider" id="time-slider" min="0" max="240" step="1" value="165" />
+        </div>
+
+        <script type="module" src="./demo/main.ts"></script>
+    </body>
+</html>

@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Texel Splatting</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<meta name="description" content="Perspective-stable 3D pixel art. Render into cubemaps from fixed origins, splat to screen as world-space quads.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&family=Outfit:wght@500;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #1a1714; color: #d4cdc4; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+main { max-width: 960px; margin: 0 auto; padding: 64px 24px 80px; text-align: center; }
+h1 { font-family: "Outfit", sans-serif; font-size: 40px; font-weight: 500; color: #ebe6df; margin-bottom: 20px; }
+.badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-bottom: 28px; }
+.badges a { line-height: 0; }
+.hero { width: 100%; border-radius: 3px; margin-bottom: 28px; border: 1px solid rgba(255,255,255,0.06); }
+.description { font-size: 15px; color: #9a9088; margin-bottom: 36px; }
+.player-wrap { width: 100%; text-align: left; }
+.player { width: 100%; aspect-ratio: 16/9; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px 3px 0 0; background: #0c0a09; display: block; }
+.player-wrap:fullscreen .player, .player-wrap:-webkit-full-screen .player { height: 100vh; aspect-ratio: auto; }
+.player-wrap:fullscreen .player-bar, .player-wrap:-webkit-full-screen .player-bar { display: none; }
+.player-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: #141210; border: 1px solid rgba(255,255,255,0.08); border-top: none; border-radius: 0 0 3px 3px; font-size: 12px; color: #706860; }
+.player-status { display: flex; align-items: center; gap: 6px; }
+.player-status .dot { width: 6px; height: 6px; border-radius: 50%; background: #5b9a41; }
+.player-status.error .dot { background: #b33; }
+.player-bar button { background: none; border: none; color: #706860; padding: 2px; cursor: pointer; display: flex; align-items: center; transition: color 0.15s; }
+.player-bar button:hover { color: #d4cdc4; }
+@media (pointer: coarse) { .player-bar button { display: none; } }
+
+/* Paper */
+.paper { text-align: left; margin-top: 64px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 48px; }
+.paper h2 { font-family: "Outfit", sans-serif; font-size: 22px; font-weight: 600; color: #ebe6df; margin: 48px 0 16px; }
+.paper h2:first-child { margin-top: 0; }
+.paper h3 { font-family: "Outfit", sans-serif; font-size: 17px; font-weight: 600; color: #ebe6df; margin: 32px 0 12px; }
+.paper p { font-size: 15px; margin-bottom: 12px; }
+.paper a { color: #b8a88a; text-decoration: none; }
+.paper a:hover { text-decoration: underline; }
+.paper sup { font-size: 11px; line-height: 0; }
+.paper sup a { color: #9a9088; }
+.abstract p { color: #b8b0a6; }
+.pipeline { margin: 32px 0; }
+.subfigures { display: flex; gap: 8px; }
+.subfigures figure { flex: 1; margin: 0; }
+.subfigures img { width: 100%; border-radius: 2px; border: 1px solid rgba(255,255,255,0.06); }
+.subfigures figcaption { font-size: 13px; color: #9a9088; text-align: center; margin-top: 6px; }
+.pipeline > figcaption { font-size: 13px; color: #9a9088; margin-top: 12px; line-height: 1.5; }
+.paper math, .paper .math { font-size: 105%; }
+ol.references { font-size: 13px; color: #9a9088; padding-left: 28px; line-height: 1.5; }
+ol.references li { margin-bottom: 6px; }
+ol.references a { color: #9a9088; word-break: break-all; }
+.bibtex-wrap { position: relative; margin-top: 12px; }
+.bibtex { background: #141210; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; padding: 16px 44px 16px 16px; font-family: "JetBrains Mono", monospace; font-size: 13px; color: #9a9088; overflow-x: auto; white-space: pre; line-height: 1.5; margin: 0; }
+.copy-btn { position: absolute; top: 10px; right: 10px; background: none; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; color: #706860; padding: 4px 6px; cursor: pointer; display: flex; align-items: center; transition: color 0.15s, border-color 0.15s; }
+.copy-btn:hover { color: #d4cdc4; border-color: rgba(255,255,255,0.15); }
+@media (max-width: 600px) { .subfigures { flex-direction: column; } main { padding: 32px 16px 48px; } h1 { font-size: 28px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Texel Splatting</h1>
+<div class="badges">
+<a href="#"><img src="https://img.shields.io/badge/arXiv-coming_soon-b31b1b.svg" alt="arXiv"></a>
+<a href="https://github.com/dylanebert/texel-splatting"><img src="https://img.shields.io/badge/code-GitHub-4285F4.svg" alt="GitHub"></a>
+<a href="https://github.com/dylanebert/texel-splatting/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-5b9a41.svg" alt="License"></a>
+</div>
+<img class="hero" id="fig-hero" src="hero.jpg" alt="Three views of a stone circle rendered with texel splatting">
+<p class="description">Perspective-stable 3D pixel art. Render into cubemaps from fixed origins, splat to screen as world-space quads.</p>
+<div class="player-wrap" id="player-wrap">
+<iframe class="player" id="player" src="demo/" allowfullscreen></iframe>
+<div class="player-bar">
+<span class="player-status" id="player-status"><span class="dot"></span><span id="status-text">loading</span></span>
+<button id="fullscreen-btn" title="Fullscreen">
+<svg id="fs-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/>
+</svg>
+</button>
+</div>
+</div>
+
+<article class="paper">
+<h2 id="abstract">Abstract</h2>
+<div class="abstract"><p>Rendering 3D scenes as pixel art requires that discrete pixels remain stable as the camera moves. Existing methods snap the camera to a grid. Under orthographic projection, this works: every pixel shifts by the same amount, and a single snap corrects all of them. Perspective breaks this. Pixels at different depths drift at different rates, and no single snap corrects all depths. Texel splatting avoids this entirely. Scene geometry is rendered into a cubemap from a fixed point in the world, and each texel is splatted to the screen as a world-space quad. Cubemap indexing gives rotation invariance. Grid-snapping the origin gives translation invariance. The primary limitation is that a fixed origin cannot see all geometry; disocclusion at probe boundaries remains an open tradeoff.</p></div>
+
+<h2 id="sec:intro">Introduction</h2>
+<p>Texel splatting is a rendering technique for perspective-stable pixel
+art. Scene geometry is rendered into a cubemap from a fixed probe
+origin, shaded per cubemap texel, and splatted to the screen as
+world-space quads.</p>
+<p>Orthographic pixel art works because the projection is linear: a
+world-space offset produces the same screen-space displacement
+regardless of depth. Camera movement shifts every pixel by the same
+amount. Snapping the camera to the screen grid <sup><a href="#ref-12">[12]</a>, <a href="#ref-14">[14]</a></sup> compensates for this shift
+uniformly, and pixels stay locked.</p>
+<p>Perspective breaks this. Under perspective projection, the same
+world-space offset produces different screen-space displacements at
+different depths. Near geometry displaces more on screen than far
+geometry. No single grid snap compensates for all depths simultaneously,
+and no screen-space correction can. ProPixelizer documents this effect,
+called shimmer or pixel creep: “pixel creep can only ever be solved for
+orthographic projections” <sup><a href="#ref-14">[14]</a></sup>.</p>
+<p>Texel marching <sup><a href="#ref-13">[13]</a></sup> addresses the same problem using
+cubemaps from fixed origins with depth-based reprojection. Rays are
+marched through the cubemap in screen space, sampling stored color when
+intersections are found. Both methods share the same principle: cubemap
+parameterization from a fixed origin decouples texel stability from
+camera movement. The display methods differ: texel marching raymarches
+in screen space, texel splatting projects world-space quads.</p>
+<p>Cubemaps <sup><a href="#ref-1">[1]</a></sup> index
+by direction, not screen position. They are rotation-invariant by
+construction. Scene geometry is rasterized into cubemaps <sup><a href="#ref-3">[3]</a></sup> and shaded per cubemap
+texel. Lighting happens in cubemap space, not screen space, so the
+results are camera-independent.</p>
+<p>A cubemap needs an origin. If the origin moves with the camera, texel
+assignments shift frame-to-frame. Snapping the origin to a world
+grid <sup><a href="#ref-6">[6]</a></sup> gives
+translation invariance. The probe origin is the camera position rounded
+to the nearest grid vertex.</p>
+<p>Each visible cubemap texel becomes a world-space quad.</p>
+<p>The architecture guarantees rotation invariance through cubemap
+parameterization and translation invariance through grid-snapped
+origins, producing perspective-stable pixel art without screen-space
+correction.</p>
+<figure class="pipeline" id="fig-pipeline">
+<div class="subfigures">
+<figure id="fig:pipeline-raster">
+<img src="pair-rasterization.jpg" />
+<figcaption>Scene geometry</figcaption>
+</figure>
+<figure id="fig:pipeline-cubemap">
+<img src="pair-cubemap.jpg" />
+<figcaption>Cubemap capture</figcaption>
+</figure>
+<figure id="fig:pipeline-splatting">
+<img src="pair-texel-splatting.jpg" />
+<figcaption>Texel splatting</figcaption>
+</figure>
+</div>
+<figcaption><strong>Figure 2.</strong> Each column pairs an orthographic diorama (top) with the camera view (bottom). The white dot marks the probe origin; the wireframe shows the camera frustum.</figcaption>
+</figure>
+<h2 id="sec:method">Method</h2>
+<p>Scene geometry is rasterized into cubemaps from fixed probe origins,
+shaded per texel in a compute pass, and splatted to screen as
+world-space quads (Figure 2). The pipeline runs
+each frame: capture, shade, splat.</p>
+<h3 id="sec:capture">Cubemap capture</h3>
+<p>Scene geometry is rasterized from the probe origin into cubemaps:
+position, normal, material, and object ID per texel. Texels are indexed
+by direction from the origin, giving rotation invariance.</p>
+<h3 id="sec:shading">Shading</h3>
+<p>A compute pass shades each cubemap texel. Diffuse lighting from
+directional and point sources; shadow rays traced against scene
+geometry. Shading is camera-independent. OKLab posterization <sup><a href="#ref-11">[11]</a></sup> quantizes lightness
+to discrete bands, producing flat color steps across surfaces.</p>
+<p>Outlines are detected in the same pass. Object ID discontinuities
+between neighboring texels mark silhouette edges; normal discontinuities
+mark creases. Both are applied as lightness shifts in OKLab space.
+Effects applied per texel (posterization, outlines, lighting) inherit
+this stability; screen-space effects (bloom, haze, light shafts) applied
+after splatting remain camera-dependent.</p>
+<h3 id="sec:probes">Probes</h3>
+<p>The probe origin is the camera position snapped to a world grid.
+Moving within a grid cell does not change the origin, giving translation
+invariance.</p>
+<p>Three probes are maintained: an eye probe at the camera position, a
+grid probe at the snapped origin, and a previous probe that holds the
+old grid cell during transitions. The eye probe provides disoccluded
+content (§<a href="#sec:disocclusion" data-reference-type="ref"
+data-reference="sec:disocclusion">2.5</a>). The grid probe provides
+stable content. The previous probe enables blending between grid
+cells.</p>
+<p>When the camera crosses a cell boundary, the current grid origin
+becomes the previous origin, and the snapped position becomes the new
+grid origin. A
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>4</mn><mo>×</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">4\times4</annotation></semantics></math>
+Bayer dither pattern <sup><a href="#ref-10">[10]</a></sup> crossfades between the two grid probes.
+Probe updates are amortized: the eye probe renders every frame; the grid
+and previous probes alternate, maintaining consistent cost during
+movement.</p>
+<h3 id="sec:splatting">Splatting</h3>
+<p>Each visible cubemap texel is splatted to screen as a world-space
+quad <sup><a href="#ref-4">[4]</a>, <a href="#ref-5">[5]</a></sup>.</p>
+<p>Each texel stores a scalar depth
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>,
+the Chebyshev distance from the probe origin. The cubemap maps texel
+coordinates
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="true" form="prefix">(</mo><mi>u</mi><mo>,</mo><mi>v</mi><mo stretchy="true" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(u, v)</annotation></semantics></math>
+on face
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>F</mi><annotation encoding="application/x-tex">F</annotation></semantics></math>
+to a direction
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝐫</mi><annotation encoding="application/x-tex">\mathbf{r}</annotation></semantics></math> <sup><a href="#ref-1">[1]</a></sup>. The world position is
+<math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝐩</mi><mo>=</mo><mi>𝐨</mi><mo>+</mo><mfrac><mi>d</mi><mrow><mo stretchy="false" form="postfix">∥</mo><mi>𝐫</mi><msub><mo stretchy="false" form="postfix">∥</mo><mi>∞</mi></msub></mrow></mfrac><mspace width="0.167em"></mspace><mi>𝐫</mi></mrow><annotation encoding="application/x-tex">\mathbf{p} = \mathbf{o} + \frac{d}{\|\mathbf{r}\|_\infty}\,\mathbf{r}
+  \label{eq:reconstruct}</annotation></semantics></math> where
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>𝐨</mi><annotation encoding="application/x-tex">\mathbf{o}</annotation></semantics></math>
+is the probe origin and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="postfix">∥</mo><mi>𝐫</mi><msub><mo stretchy="false" form="postfix">∥</mo><mi>∞</mi></msub><mo>=</mo><mo>max</mo><mrow><mo stretchy="true" form="prefix">(</mo><mrow><mo stretchy="true" form="prefix">|</mo><msub><mi>r</mi><mi>x</mi></msub><mo stretchy="true" form="postfix">|</mo></mrow><mo>,</mo><mrow><mo stretchy="true" form="prefix">|</mo><msub><mi>r</mi><mi>y</mi></msub><mo stretchy="true" form="postfix">|</mo></mrow><mo>,</mo><mrow><mo stretchy="true" form="prefix">|</mo><msub><mi>r</mi><mi>z</mi></msub><mo stretchy="true" form="postfix">|</mo></mrow><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\|\mathbf{r}\|_\infty = \max(|r_x|, |r_y|, |r_z|)</annotation></semantics></math>.
+Quad corners evaluate this at
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="true" form="prefix">(</mo><mi>u</mi><mo>±</mo><mi>h</mi><mo>,</mo><mi>v</mi><mo>±</mo><mi>h</mi><mo stretchy="true" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(u \pm h, v \pm h)</annotation></semantics></math>
+for half-texel width
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>.
+All four share depth
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>;
+no per-corner intersection is needed.</p>
+<p>Adjacent texels leave gaps when splatted at exact texel boundaries.
+Expanding each quad beyond its boundary fills these gaps, but where
+neighboring texels lie at similar depths, overlapping quads produce
+Z-fighting. Each texel’s depth is compared against its four neighbors.
+At edges where depths differ, quads expand freely; the depth buffer
+resolves overlap. At edges where depths are similar, expansion is
+constrained and scaled by the grazing angle between the view direction
+and the cubemap face.</p>
+<h3 id="sec:disocclusion">Disocclusion</h3>
+<p>A fixed probe origin cannot see geometry occluded from its position.
+As the camera moves away from the probe, regions become visible that the
+probe never captured. An eye probe at the camera position fills these
+gaps. Because the eye probe moves with the camera, its texel assignments
+are unstable: the same surface point maps to different texels each
+frame, producing shimmer <sup><a href="#ref-8">[8]</a></sup>.</p>
+<h2 id="sec:discussion">Discussion</h2>
+<h3 id="sec:cost">Cost model</h3>
+<p>The scene in Figure 1 renders at 40 fps on an
+iPhone 15 (A16 GPU, mobile Safari) and under 4 ms per frame on an
+RTX 4090, both at
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mn>384</mn><mn>2</mn></msup><annotation encoding="application/x-tex">384^2</annotation></semantics></math>
+texels per face. The pixel art aesthetic demands low cubemap resolution,
+so the shading budget is inherently small. Camera-independent shading
+enables caching across frames <sup><a href="#ref-7">[7]</a>, <a href="#ref-9">[9]</a>, <a href="#ref-2">[2]</a></sup>.</p>
+<h3 id="sec:limitations">Limitations and future work</h3>
+<p>Disocclusion is the primary limitation. Geometry hidden from the
+probe origin was never captured; the eye probe fills these gaps, but
+shimmer is confined to regions the grid probe cannot see.</p>
+<p>Probe density controls the balance: large cells produce more stable
+content but increase the disoccluded area; small cells reduce
+disocclusion at the cost of more frequent transitions. Adaptive probe
+placement, additional stable probes, specular materials, animated
+geometry, and level-of-detail across probe cells remain open.</p>
+<h2 id="references">References</h2>
+<ol class="references">
+<li id="ref-1">N. Greene, “Environment mapping and other applications of world
+projections,” <em>IEEE CG&amp;A</em>, vol. 6, no. 11, pp. 21–29,
+1986.</li>
+<li id="ref-2">R. L. Cook, L. Carpenter, and E. Catmull, “The Reyes image rendering
+architecture,” in <em>Proc. SIGGRAPH ’87</em>, 1987.</li>
+<li id="ref-3">T. Saito and T. Takahashi, “Comprehensible rendering of 3-D shapes,”
+in <em>Proc. SIGGRAPH ’90</em>, pp. 197–206, 1990.</li>
+<li id="ref-4">H. Pfister, M. Zwicker, J. van Baar, and M. Gross, “Surfels: Surface
+elements as rendering primitives,” in <em>Proc. SIGGRAPH ’00</em>,
+pp. 335–342, 2000.</li>
+<li id="ref-5">M. Zwicker, H. Pfister, J. van Baar, and M. Gross, “Surface
+splatting,” in <em>Proc. SIGGRAPH ’01</em>, pp. 371–378, 2001.</li>
+<li id="ref-6">W. Engel, “Cascaded shadow maps,” in <em>ShaderX5</em>, pp. 197–206,
+2007.</li>
+<li id="ref-7">C. A. Burns, K. Fatahalian, and W. R. Mark, “A lazy object-space
+shading architecture with decoupled sampling,” in <em>Proc. HPG
+’10</em>, 2010.</li>
+<li id="ref-8">P. Bénard, A. Bousseau, and J. Thollot, “State-of-the-art report on
+temporal coherence for stylized animations,” <em>Computer Graphics
+Forum</em>, vol. 30, no. 2, 2011.</li>
+<li id="ref-9">K. Hillesland and B. Yang, “Texel shading,” in <em>Eurographics 2016
+Short Papers</em>, 2016.</li>
+<li id="ref-10">B. E. Bayer, “An optimum method for two-level rendition of
+continuous-tone pictures,” in <em>Proc. IEEE ICC</em>, pp. 26-11–26-15,
+1973.</li>
+<li id="ref-11">B. Ottosson, “A perceptual color space for image processing,” 2020.
+[Online]. Available: <a href="https://bottosson.github.io/posts/oklab/"
+class="uri">https://bottosson.github.io/posts/oklab/</a></li>
+<li id="ref-12">t3ssel8r, “3D pixel art rendering in Unity.” [Online]. Available: <a
+href="https://www.youtube.com/watch?v=d6tp43wZqps"
+class="uri">https://www.youtube.com/watch?v=d6tp43wZqps</a></li>
+<li id="ref-13">tesseractcat, “Shadowglass 3D pixel-art style,” 2026. [Online].
+Available: <a href="https://tesseractc.at/shadowglass"
+class="uri">https://tesseractc.at/shadowglass</a></li>
+<li id="ref-14">E. Bentine, “ProPixelizer.” [Online]. Available: <a
+href="https://sites.google.com/view/propixelizer/"
+class="uri">https://sites.google.com/view/propixelizer/</a></li>
+</ol>
+
+
+<h2 id="citation">Citation</h2>
+<div class="bibtex-wrap">
+<pre class="bibtex"><code>@article{ebert2026texelsplatting,
+  title={Texel Splatting: Perspective-Stable 3D Pixel Art},
+  author={Ebert, Dylan},
+  year={2026}
+}</code></pre>
+<button class="copy-btn" id="copy-btn" title="Copy to clipboard">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+</button>
+</div>
+</article>
+</main>
+
+<script>
+const wrap = document.getElementById("player-wrap");
+const player = document.getElementById("player");
+const status = document.getElementById("player-status");
+const statusText = document.getElementById("status-text");
+const fsBtn = document.getElementById("fullscreen-btn");
+if (!navigator.gpu) {
+    status.classList.add("error");
+    statusText.textContent = "WebGPU not supported";
+    fsBtn.disabled = true;
+    fsBtn.style.opacity = "0.3";
+    player.src = "";
+    player.srcdoc = '<html style="height:100%"><body style="background:#0c0a09;color:#706860;font:14px system-ui;display:flex;align-items:center;justify-content:center;height:100%;margin:0;overflow:hidden;text-align:center;padding:0 20px 30px"><div>WebGPU is required.<br><a href="https://caniuse.com/webgpu" style="color:#9a9088" target="_blank">Check browser support</a></div></body></html>';
+} else {
+    function onLoad() { statusText.textContent = "running"; }
+    player.addEventListener("load", onLoad);
+    if (player.contentDocument?.readyState === "complete") onLoad();
+}
+fsBtn.addEventListener("click", () => {
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fs) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (wrap.requestFullscreen || wrap.webkitRequestFullscreen).call(wrap);
+});
+const expandPath = "M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3";
+const shrinkPath = "M4 14H2v8h8v-2H4zM20 10h2V2h-8v2h6zM14 2v2h6v6h2V2zM2 14v8h8v-2H4v-6z";
+function onFsChange() {
+    const a = document.fullscreenElement || document.webkitFullscreenElement;
+    document.getElementById("fs-icon").querySelector("path").setAttribute("d", a ? shrinkPath : expandPath);
+}
+document.addEventListener("fullscreenchange", onFsChange);
+document.addEventListener("webkitfullscreenchange", onFsChange);
+document.getElementById("copy-btn").addEventListener("click", function() {
+    navigator.clipboard.writeText(this.previousElementSibling.textContent);
+    this.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+    setTimeout(() => { this.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>'; }, 1500);
+});
+</script>
+<script data-goatcounter="https://dylanebert.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
